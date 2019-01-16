@@ -1247,15 +1247,27 @@ if(!String.prototype.formatNum) {
 		var cell = that.closest('.cal-cell');
 		var row = cell.closest('.cal-before-eventlist');
 		var tick_position = cell.data('cal-row');
+		var events = self.options.events_liste;
 
 		that.fadeOut('fast');
 
 		slider.slideUp('fast', function() {
 			var event_list = $('.events-list', cell);
-			slider.html(self.options.templates['events-list']({
-				cal: self,
-				events: self.getEventsBetween(parseInt(event_list.data('cal-start')), parseInt(event_list.data('cal-end')))
-			}));
+
+			if(!events) {
+				slider.html(self.options.templates['events-list']({
+					cal: self,
+					events: self.getEventsBetween(parseInt(event_list.data('cal-start')), parseInt(event_list.data('cal-end'))),
+					loading: false
+				}));
+			}
+			else {
+				slider.html(self.options.templates['events-list']({
+					cal: self,
+					events: [],
+					loading: true
+				}));
+			}
 			row.after(slider);
 			self.activecell = $('[data-cal-date]', cell).text();
 			$('#cal-slide-tick').addClass('tick' + tick_position).show();
@@ -1265,6 +1277,33 @@ if(!String.prototype.formatNum) {
 					self.activecell = 0;
 				});
 			});
+
+			if(events) {
+				switch($.type(events)) {
+					case 'function':
+						if(events().then)
+							events(event_list.data('cal-start')).then(function(result) {
+								slider.html(self.options.templates['events-list']({
+									cal:self,
+									events: result,
+									loading: false
+								}));
+							});
+						else
+							slider.html(self.options.templates['events-list']({
+								cal:self,
+								events: events(),
+								loading: false
+							}));
+						break;
+					case 'array':
+						slider.html(self.options.templates['events-list']({
+							cal:self,
+							events: events,
+							loading: false
+						}));
+				}
+			}
 		});
 
 		// Wait 400ms before updating the modal & attach the mouseenter&mouseleave(400ms is the time for the slider to fade out and slide up)
