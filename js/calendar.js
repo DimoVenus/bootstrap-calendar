@@ -989,15 +989,39 @@ if(!String.prototype.formatNum) {
 		}
 		this.options.onBeforeEventsLoad.call(this, function() {
 			if (!self.options.events.length || !self.options.events_cache) {
-				self.options.events = loader();
-				self.options.events.sort(function (a, b) {
-					var delta;
-					delta = a.start - b.start;
-					if (delta == 0) {
-						delta = a.end - b.end;
-					}
-					return delta;
-				});
+				var events = loader();
+				
+				//Vérification du type
+				if (typeof events == 'object' && typeof events.then == 'function') {
+					//Résolution de la promesse
+					events.then(function(result) {
+						//Définition des events
+						self.options.events = result;
+
+						//Tri des events
+						self.options.events.sort(function (a, b) {
+							var delta;
+							delta = a.start - b.start;
+							if (delta == 0) {
+								delta = a.end - b.end;
+							}
+							return delta;
+						});
+					});
+				} else {
+					//Définition des events
+					self.options.events = events;
+
+					//Tri des events
+					self.options.events.sort(function (a, b) {
+						var delta;
+						delta = a.start - b.start;
+						if (delta == 0) {
+							delta = a.end - b.end;
+						}
+						return delta;
+					});
+				}
 			}
 			self.options.onAfterEventsLoad.call(self, self.options.events);
 		});
