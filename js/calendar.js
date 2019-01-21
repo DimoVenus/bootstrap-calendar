@@ -52,8 +52,8 @@ if(!String.prototype.formatNum) {
 (function($) {
 
 	var defaults = {
-		// Container to append the tooltip
-		tooltip_container : 'body',
+        // Container to append the tooltip
+        tooltip_container : 'body',
 		// Width of the calendar
 		width: '100%',
 		// Initial view (can be 'month', 'week', 'day')
@@ -128,11 +128,6 @@ if(!String.prototype.formatNum) {
 		merge_holidays: false,
 		display_week_numbers: true,
 		weekbox: true,
-		//shows events which fits between time_start and time_end
-		show_events_which_fits_time: false,
-		// Headers defined for ajax call
-		headers: {},
-
 		// ------------------------------------------------------------
 		// CALLBACKS. Events triggered by calendar class. You can use
 		// those to affect you UI
@@ -462,12 +457,10 @@ if(!String.prototype.formatNum) {
 		this._update();
 	};
 
-	Calendar.prototype._format_hour = function(str_hour, leadingZero) {
+	Calendar.prototype._format_hour = function(str_hour) {
 		var hour_split = str_hour.split(":");
 		var hour = parseInt(hour_split[0]);
 		var minutes = parseInt(hour_split[1]);
-		var leadingZero = leadingZero == 'undefined' ? true : false;
-		var hourLength = leadingZero ? 2 : 1;
 
 		var suffix = '';
 
@@ -485,7 +478,7 @@ if(!String.prototype.formatNum) {
 			}
 		}
 
-		return hour.toString().formatNum(hourLength) + ':' + minutes.toString().formatNum(2) + suffix;
+		return hour.toString().formatNum(2) + ':' + minutes.toString().formatNum(2) + suffix;
 	};
 
 	Calendar.prototype._format_time = function(datetime) {
@@ -512,7 +505,7 @@ if(!String.prototype.formatNum) {
 		var start = new Date(this.options.position.start.getTime());
 		start.setHours(time_start[0]);
 		start.setMinutes(time_start[1]);
-		var end = new Date(this.options.position.end.getTime()-(86400000));
+		var end = new Date(this.options.position.end.getTime());
 		end.setHours(time_end[0]);
 		end.setMinutes(time_end[1]);
 
@@ -537,36 +530,19 @@ if(!String.prototype.formatNum) {
 				e.end_hour = f.getDate() + ' ' + $self.locale['ms' + f.getMonth()] + ' ' + e.end_hour;
 			}
 
-			if(!$self.options.show_events_which_fits_time) {
-				if(e.start <= start.getTime() && e.end >= end.getTime()) {
-					data.all_day.push(e);
-					return;
-				}
+			if(e.start < start.getTime() && e.end > end.getTime()) {
+				data.all_day.push(e);
+				return;
+			}
 
-				if(e.end < start.getTime()) {
-					data.before_time.push(e);
-					return;
-				}
+			if(e.end < start.getTime()) {
+				data.before_time.push(e);
+				return;
+			}
 
-				if(e.start > end.getTime()) {
-					data.after_time.push(e);
-					return;
-				}
-			} else {
-				if(e.start < start.getTime()) {
-					data.before_time.push(e);
-					return;
-				}
-
-				if(e.end > end.getTime()) {
-					data.after_time.push(e);
-					return;
-				}
-
-				if(e.start < start.getTime() && e.end < end.getTime()) {
-					data.all_day.push(e);
-					return;
-				}
+			if(e.start > end.getTime()) {
+				data.after_time.push(e);
+				return;
 			}
 
 			var event_start = start.getTime() - e.start;
@@ -590,6 +566,9 @@ if(!String.prototype.formatNum) {
 
 			data.by_hour.push(e);
 		});
+
+		//var d = new Date('2013-03-14 13:20:00');
+		//warn(d.getTime());
 	};
 
 	Calendar.prototype._hour_min = function(hour) {
@@ -619,23 +598,19 @@ if(!String.prototype.formatNum) {
 		var first_day = getExtentedOption(this, 'first_day');
 
 		$.each(this.getEventsBetween(start, end), function(k, event) {
-			var eventStart  = new Date(parseInt(event.start));
-			eventStart.setHours(0,0,0,0);
-			var eventEnd    = new Date(parseInt(event.end));
-
-			event.start_day = new Date(parseInt(eventStart.getTime())).getDay();
+			event.start_day = new Date(parseInt(event.start)).getDay();
 			if(first_day == 1) {
 				event.start_day = (event.start_day + 6) % 7;
 			}
-			if((eventEnd.getTime() - eventStart.getTime()) <= 86400000) {
+			if((event.end - event.start) <= 86400000) {
 				event.days = 1;
 			} else {
-				event.days = ((eventEnd.getTime() - eventStart.getTime()) / 86400000);
+				event.days = ((event.end - event.start) / 86400000);
 			}
 
-			if(eventStart.getTime() < start) {
+			if(event.start < start) {
 
-				event.days = event.days - ((start - eventStart.getTime()) / 86400000);
+				event.days = event.days - ((start - event.start) / 86400000);
 				event.start_day = 0;
 			}
 
@@ -776,6 +751,8 @@ if(!String.prototype.formatNum) {
 	};
 
 	Calendar.prototype.view = function(view) {
+		var self = this;
+		
 		if(view) {
 			if(!this.options.views[view].enable) {
 				return;
@@ -784,8 +761,10 @@ if(!String.prototype.formatNum) {
 		}
 
 		this._init_position();
-		this._loadEvents();
-		this._render();
+		this._loadEvents().then(function() {
+			self._render();
+		});
+		
 
 		this.options.onAfterViewLoad.call(this, this.options.view);
 	};
@@ -902,7 +881,7 @@ if(!String.prototype.formatNum) {
 		}
 		return;
 	};
-
+	
 	Calendar.prototype.getYear = function() {
 		var p = this.options.position.start;
 		return p.getFullYear();
@@ -935,68 +914,86 @@ if(!String.prototype.formatNum) {
 	Calendar.prototype._loadEvents = function() {
 		var self = this;
 		var source = null;
-		if('events_source' in this.options && this.options.events_source !== '') {
-			source = this.options.events_source;
-		}
-		else if('events_url' in this.options) {
-			source = this.options.events_url;
-			warn('The events_url option is DEPRECATED and it will be REMOVED in near future. Please use events_source instead.');
-		}
-		var loader;
-		switch($.type(source)) {
-			case 'function':
-				loader = function() {
-					return source(self.options.position.start, self.options.position.end, browser_timezone);
-				};
-				break;
-			case 'array':
-				loader = function() {
-					return [].concat(source);
-				};
-				break;
-			case 'string':
-				if(source.length) {
+		var promise = new Promise(function(resolve,reject) {
+			if('events_source' in self.options && self.options.events_source !== '') {
+				source = self.options.events_source;
+			}
+			else if('events_url' in self.options) {
+				source = self.options.events_url;
+				warn('The events_url option is DEPRECATED and it will be REMOVED in near future. Please use events_source instead.');
+			}
+			var loader;
+			switch($.type(source)) {
+				case 'function':
 					loader = function() {
-						var events = [];
-						var d_from = self.options.position.start;
-						var d_to = self.options.position.end;
-						var params = {from: d_from.getTime(), to: d_to.getTime(), utc_offset_from: d_from.getTimezoneOffset(), utc_offset_to: d_to.getTimezoneOffset()};
-
-						if(browser_timezone.length) {
-							params.browser_timezone = browser_timezone;
-						}
-						$.ajax({
-							url: buildEventsUrl(source, params),
-							dataType: 'json',
-							type: 'GET',
-							async: false,
-							headers: self.options.headers,
-						}).done(function(json) {
-							if(!json.success) {
-								$.error(json.error);
-							}
-							if(json.result) {
-								events = json.result;
-							}
-						});
-						return events;
+						return source(self.options.position.start, self.options.position.end, browser_timezone);
 					};
-				}
-				break;
-		}
-		if(!loader) {
-			$.error(this.locale.error_loadurl);
-		}
-		this.options.onBeforeEventsLoad.call(this, function() {
-			if (!self.options.events.length || !self.options.events_cache) {
-				var events = loader();
-				
-				//Vérification du type
-				if (typeof events == 'object' && typeof events.then == 'function') {
-					//Résolution de la promesse
-					events.then(function(result) {
+					break;
+				case 'array':
+					loader = function() {
+						return [].concat(source);
+					};
+					break;
+				case 'string':
+					if(source.length) {
+						loader = function() {
+							var events = [];
+	                                                var d_from = self.options.position.start;
+	                                                var d_to = self.options.position.end;
+	                                                var params = {from: d_from.getTime(), to: d_to.getTime(), utc_offset_from: d_from.getTimezoneOffset(), utc_offset_to: d_to.getTimezoneOffset()};
+
+							if(browser_timezone.length) {
+								params.browser_timezone = browser_timezone;
+							}
+							$.ajax({
+								url: buildEventsUrl(source, params),
+								dataType: 'json',
+								type: 'GET',
+								async: false,
+								headers: self.options.headers
+							}).done(function(json) {
+								if(!json.success) {
+									$.error(json.error);
+								}
+								if(json.result) {
+									events = json.result;
+								}
+							});
+							return events;
+						};
+					}
+					break;
+			}
+			if(!loader) {
+				$.error(this.locale.error_loadurl);
+			}
+			self.options.onBeforeEventsLoad.call(self, function(next) {
+				if (!self.options.events.length || !self.options.events_cache) {
+					var events = loader();
+					
+					//Vérification du type
+					if (typeof events == 'object' && typeof events.then == 'function') {
+						//Résolution de la promesse
+						events.then(function(result) {
+							//Définition des events
+							self.options.events = result;
+
+							//Tri des events
+							self.options.events.sort(function (a, b) {
+								var delta;
+								delta = a.start - b.start;
+								if (delta == 0) {
+									delta = a.end - b.end;
+								}
+								return delta;
+							});
+							
+							self.options.onAfterEventsLoad.call(self, self.options.events);
+							resolve();
+						});
+					} else {
 						//Définition des events
-						self.options.events = result;
+						self.options.events = events;
 
 						//Tri des events
 						self.options.events.sort(function (a, b) {
@@ -1007,24 +1004,17 @@ if(!String.prototype.formatNum) {
 							}
 							return delta;
 						});
-					});
-				} else {
-					//Définition des events
-					self.options.events = events;
-
-					//Tri des events
-					self.options.events.sort(function (a, b) {
-						var delta;
-						delta = a.start - b.start;
-						if (delta == 0) {
-							delta = a.end - b.end;
-						}
-						return delta;
-					});
+						
+						self.options.onAfterEventsLoad.call(self, self.options.events);
+						resolve();
+					}
 				}
-			}
-			self.options.onAfterEventsLoad.call(self, self.options.events);
+			});
 		});
+		
+		
+			
+		return promise;
 	};
 
 	Calendar.prototype._templatePath = function(name) {
@@ -1256,7 +1246,7 @@ if(!String.prototype.formatNum) {
 				return true;
 			}
 			var event_end = this.end || this.start;
-			if((parseInt(this.start) < end) && (parseInt(event_end) > start)) {
+			if((parseInt(this.start) < end) && (parseInt(event_end) >= start)) {
 				events.push(this);
 			}
 		});
