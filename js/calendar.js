@@ -1302,6 +1302,7 @@ if(!String.prototype.formatNum) {
 									events: result,
 									loading: false
 								}));
+								$('#cal-slide-tick').addClass('tick' + tick_position).show();
 							});
 						else
 							slider.html(self.options.templates['events-list']({
